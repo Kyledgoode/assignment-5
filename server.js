@@ -152,7 +152,7 @@ function getAvailableValue(bodyObj){
   return true;
 }
 
-app,get("/menu", (req, res) => {
+app.get("/menu", (req, res) => {
   res.json(menuItems);
 });
 
