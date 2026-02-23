@@ -1,5 +1,10 @@
 // Import packages, initialize an express app, and define the port you will use
+const express = require('express');
+const { body, validationResult } = require('express-validator');
+const app = express();
+const PORT = 3000;
 
+app.use(express.json());
 
 
 // Data for the server
@@ -61,3 +66,155 @@ const menuItems = [
 ];
 
 // Define routes and implement middleware here
+function loggingRequest(req, res, next) {
+  console.log(`${req.method} ${req.url}`);
+
+  if (req.method === 'POST' || req.method === 'PUT') {
+    console.log('Request Body:', req.body);
+  }
+
+  next();
+}
+
+app.use(loggingRequest);
+
+const menuItemValidation = [
+  body("name")
+    .exists({ checkFalsy: true }).withMessage("Name is required")
+    .isString().withMessage("Name must be a string")
+    .isLength({ min: 3 }).withMessage("Name must be at least 3 characters long")
+    .trim(),
+
+  body("description")
+    .exists({ checkFalsy: true }).withMessage("Description is required")
+    .isString().withMessage("Description must be a string")
+    .isLength({ min: 10 }).withMessage("Description must be at least 10 characters long")
+    .trim(),
+
+  body("price")
+    .exists().withMessage("Price is required")
+    .isFloat({ gt: 0 }).withMessage("Price must be a positive number")
+    .toFloat(),
+
+  body("category")
+    .exists({ checkFalsy: true }).withMessage("Category is required")
+    .isString().withMessage("Category must be a string")
+    .isIn(["appetizer", "entree", "dessert", "beverage"]).withMessage("Category must be one of: appetizer, entree, dessert, beverage")
+    .trim(),
+
+  body("ingredients")
+    .exists().withMessage("Ingredients are required")
+    .isArray({ min: 1 }).withMessage("Ingredients must be an array with at least one item"),
+
+  body("available")
+    .optional()
+    .isBoolean().withMessage("Available must be a boolean value")
+    .toBoolean()
+];
+
+handleValidationErrors = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ 
+      message: "Validation failed",
+      errors: errors.array()
+     });
+  }
+  next();
+}
+
+function parseId(param) {
+  const id = Number(param);
+  if (Number.isInteger(id)) {
+    return
+  }
+  return NaN;
+}
+
+function findMenuItemIndex(id) {
+  return menuItems.findIndex(item => item.id === id);
+}
+
+function getNextId() {
+  let maxId = 0;
+  for (let i = 0; i < menuItems.length; i++) {
+    if (menuItems[i].id > maxId) {
+      maxId = menuItems[i].id;
+    }
+  }
+  return maxId + 1;
+}
+
+function getAvailableValue(bodyObj){
+  if (Object.prototype.hasOwnProperty.call(bodyObj, 'available')) {
+    return bodyObj.available;
+  }
+  return true;
+}
+
+app,get("/menu", (req, res) => {
+  res.json(menuItems);
+});
+
+app.get("/menu/:id", (req, res) => {
+  const id = parseId(req.params.id);
+  const item = menuItems.find(item => item.id === id);
+
+  if (!item) {
+    return res.status(404).json({ message: "Menu item not found" });
+  }
+
+  return res.status(200).json(item);
+});
+
+app.post("/menu", menuItemValidation, handleValidationErrors, (req, res) => {
+  const newItem = {
+    id: getNextId(),
+    name: req.body.name,
+    description: req.body.description,
+    price: req.body.price,
+    category: req.body.category,
+    ingredients: req.body.ingredients,
+    available: getAvailableValue(req.body)
+  };
+
+  menuItems.push(newItem);
+  return res.status(201).json(newItem);
+});
+
+app.put("/menu/:id", menuItemValidation, handleValidationErrors, (req, res) => {
+  const id = parseId(req.params.id);
+  const index = findMenuItemIndex(id);
+
+  if (index === -1) {
+    return res.status(404).json({ message: "Menu item not found" });
+  }
+
+  menuItems[index] = {
+    id: id,
+    name: req.body.name,
+    description: req.body.description,
+    price: req.body.price,
+    category: req.body.category,
+    ingredients: req.body.ingredients,
+    available: getAvailableValue(req.body)
+  };
+
+  return res.status(200).json(menuItems[index]);
+});
+
+app.delete("/menu/:id", (req, res) => {
+  const id = parseId(req.params.id);
+  const index = findMenuItemIndex(id);
+
+  if (index === -1) {
+    return res.status(404).json({ message: "Menu item not found" });
+  }
+
+  const deleted = menuItems.splice(index, 1)[0];
+  return res.status(200).json({ message: "Menu item deleted", deleted: deleted});
+});
+
+app.listen(PORT, () => {
+  console.log(`Restaurant API Server is running on port ${PORT}`);
+});
